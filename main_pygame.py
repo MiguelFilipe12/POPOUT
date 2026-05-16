@@ -1,4 +1,5 @@
 import os
+import sys
 os.environ['MPLBACKEND'] = 'Agg'
 
 import pygame
@@ -32,7 +33,7 @@ def reset_game():
 
 pygame.init()
 
-cell_size   = 110
+cell_size   = 106
 top_area    = 90
 bottom_area = 90
 
@@ -193,7 +194,7 @@ def show_menu():
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 for i, opcao in enumerate(opcoes):
@@ -254,7 +255,7 @@ def show_ai_selection_menu(titulo, player_num=None):
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit(); sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 for i, opcao in enumerate(opcoes):
@@ -268,17 +269,15 @@ def show_ai_selection_menu(titulo, player_num=None):
 
 
 def show_end_popup(winner):
-    overlay = pygame.Surface((width, height))
-    overlay.set_alpha(180)
-    overlay.fill((0, 0, 0))
-    screen.blit(overlay, (0, 0))
+    """
+    Mostra o ecrã de fim de jogo com o vencedor e dois botões:
+      - "Jogar Novamente"  → devolve "replay"
+      - "Menu"             → devolve "menu"
+    """
+    font_title  = pygame.font.Font(None, 60)
+    font_btn    = pygame.font.Font(None, 40)
+    clock       = pygame.time.Clock()
 
-    popup_w, popup_h = 350, 150
-    popup = pygame.Surface((popup_w, popup_h))
-    popup.fill((40, 40, 60))
-    pygame.draw.rect(popup, (100, 100, 120), popup.get_rect(), 3, border_radius=15)
-
-    font = pygame.font.Font(None, 36)
     if winner == 1:
         txt, cor = "PLAYER 1 WINS!", player1
     elif winner == 2:
@@ -286,123 +285,186 @@ def show_end_popup(winner):
     else:
         txt, cor = "IT'S A TIE!", (255, 255, 255)
 
-    t = font.render(txt, True, cor)
-    popup.blit(t, t.get_rect(center=(popup_w // 2, popup_h // 2)))
-    screen.blit(popup, ((width - popup_w) // 2, (height - popup_h) // 2))
-    pygame.display.update()
-    pygame.time.wait(2000)
+    popup_w, popup_h = 420, 240
+    popup_x = (width  - popup_w) // 2
+    popup_y = (height - popup_h) // 2
+
+    btn_w, btn_h = 160, 50
+    btn_gap      = 30
+    btn_y        = popup_y + popup_h - btn_h - 28
+
+    btn_replay_rect = pygame.Rect(popup_x + popup_w // 2 - btn_w - btn_gap // 2, btn_y, btn_w, btn_h)
+    btn_menu_rect   = pygame.Rect(popup_x + popup_w // 2 + btn_gap // 2,          btn_y, btn_w, btn_h)
+
+    while True:
+        clock.tick(60)
+
+        # fundo escurecido
+        overlay = pygame.Surface((width, height))
+        overlay.set_alpha(180)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        # painel
+        popup = pygame.Surface((popup_w, popup_h), pygame.SRCALPHA)
+        pygame.draw.rect(popup, (40, 40, 60, 230), popup.get_rect(), border_radius=18)
+        pygame.draw.rect(popup, (100, 100, 140), popup.get_rect(), 3, border_radius=18)
+        screen.blit(popup, (popup_x, popup_y))
+
+        # texto do vencedor
+        t = font_title.render(txt, True, cor)
+        screen.blit(t, t.get_rect(center=(width // 2, popup_y + 75)))
+
+        mx, my = pygame.mouse.get_pos()
+
+        # botão Jogar Novamente
+        hover_r = btn_replay_rect.collidepoint(mx, my)
+        pygame.draw.rect(screen,
+                         (80, 160, 80) if hover_r else (50, 120, 50),
+                         btn_replay_rect, border_radius=10)
+        tr = font_btn.render("Replay", True, (255, 255, 255))
+        screen.blit(tr, tr.get_rect(center=btn_replay_rect.center))
+
+        # botão Menu
+        hover_m = btn_menu_rect.collidepoint(mx, my)
+        pygame.draw.rect(screen,
+                         (80, 80, 180) if hover_m else (50, 50, 140),
+                         btn_menu_rect, border_radius=10)
+        tm = font_btn.render("Menu", True, (255, 255, 255))
+        screen.blit(tm, tm.get_rect(center=btn_menu_rect.center))
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_replay_rect.collidepoint(event.pos):
+                    return "replay"
+                if btn_menu_rect.collidepoint(event.pos):
+                    return "menu"
 
 
-# ── SETUP ───────────────────────────────────────────────────────────────────────
-modo_jogo = show_menu()
+# ── SETUP de IAs (chamado após escolha do menu) ─────────────────────────────────
+def setup_ai(modo_jogo):
+    ai_p1    = None
+    ai_p2    = None
+    ai_human = None
+    dt_tree  = None
 
-ai_p1    = None
-ai_p2    = None
-ai_human = None   # modo Human vs AI
-dt_tree  = None
+    if modo_jogo == 2:
+        ai_human = show_ai_selection_menu("HUMAN vs AI")
+        if ai_human == "dt":
+            dt_tree = load_dt()
 
-if modo_jogo == 2:
-    ai_human = show_ai_selection_menu("HUMAN vs AI")
-    if ai_human == "dt":
-        dt_tree = load_dt()
+    elif modo_jogo == 3:
+        ai_p1 = show_ai_selection_menu("AI vs AI", player_num=1)
+        ai_p2 = show_ai_selection_menu("AI vs AI", player_num=2)
+        if ai_p1 == "dt" or ai_p2 == "dt":
+            dt_tree = load_dt()
 
-elif modo_jogo == 3:
-    ai_p1 = show_ai_selection_menu("AI vs AI", player_num=1)
-    ai_p2 = show_ai_selection_menu("AI vs AI", player_num=2)
-    if ai_p1 == "dt" or ai_p2 == "dt":
-        dt_tree = load_dt()
-
-matrix         = iniciar_matrix()
-running        = True
-current_player = 1
-mcts_root      = None   # Human vs AI
-mcts_root_p1   = None   # AI vs AI jogador 1
-mcts_root_p2   = None   # AI vs AI jogador 2
-state_history  = {}
-
-reuse_ok   = 0
-reuse_fail = 0
-turn       = 0
-jogos      = 0
-MAX        = 2
+    return ai_p1, ai_p2, ai_human, dt_tree
 
 
-# ── LOOP PRINCIPAL ──────────────────────────────────────────────────────────────
-while running:
+# ── LOOP DE UMA PARTIDA ─────────────────────────────────────────────────────────
+def run_game(modo_jogo, ai_p1, ai_p2, ai_human, dt_tree):
+    """
+    Corre uma partida completa.
+    Devolve "replay" ou "menu" conforme o botão premido no ecrã de fim.
+    """
+    matrix         = iniciar_matrix()
+    current_player = 1
+    mcts_root      = None
+    mcts_root_p1   = None
+    mcts_root_p2   = None
+    state_history  = {}
+    reuse_ok       = 0
+    reuse_fail     = 0
+    turn           = 0
+    clock          = pygame.time.Clock()
+    running        = True
+    acao_fim       = None   # "replay" | "menu"
 
-    current_state            = board_to_tuple(matrix)
-    repetition_draw_available = state_history.get(current_state, 0) >= 3
-    full_board_draw_available = (board_is_full(matrix)
-                                 and not check_victory(matrix, 1)
-                                 and not check_victory(matrix, 2))
+    while running:
+        clock.tick(60)
 
-    # Empate automático AI vs AI
-    if modo_jogo == 3 and (repetition_draw_available or full_board_draw_available):
-        show_end_popup(0)
-        matrix, current_player, _ = reset_game()
-        mcts_root_p1 = None
-        mcts_root_p2 = None
-        state_history = {}
-        turn = 0
+        current_state             = board_to_tuple(matrix)
+        repetition_draw_available = state_history.get(current_state, 0) >= 3
+        full_board_draw_available = (board_is_full(matrix)
+                                     and not check_victory(matrix, 1)
+                                     and not check_victory(matrix, 2))
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+        # ── Empate automático — tabuleiro cheio em qualquer modo, repetição no AI vs AI
+        if full_board_draw_available or (modo_jogo == 3 and repetition_draw_available):
+            screen.fill(black)
+            draw_board(matrix)
+            pygame.display.update()
+            acao_fim = show_end_popup(0)
+            running  = False
+            break
 
-        if event.type == pygame.MOUSEBUTTONDOWN and not (modo_jogo == 2 and current_player == 2) and not (modo_jogo == 3):
-            x, y   = event.pos
-            col    = x // cell_size
-            jogada_feita = False
+        # ── Eventos ─────────────────────────────────────────────────────────────
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
 
-            if repetition_draw_available or full_board_draw_available:
-                reason   = "R3" if repetition_draw_available else "R2"
-                btn_rect = draw_draw_button(reason)
-                if btn_rect.collidepoint(x, y):
-                    show_end_popup(0)
-                    running = False
-                    break
+            if event.type == pygame.MOUSEBUTTONDOWN and not (modo_jogo == 2 and current_player == 2) and not (modo_jogo == 3):
+                x, y = event.pos
+                col  = x // cell_size
+                jogada_feita = False
 
-            if y < top_area:
-                if not col_isFull(matrix, col):
-                    drop(matrix, current_player, col)
-                    jogada_feita = True
-            elif y > height - bottom_area:
-                if check_pop(matrix, current_player, col):
-                    pop(matrix, current_player, col)
-                    jogada_feita = True
+                if repetition_draw_available:
+                    reason   = "R3"
+                    btn_rect = draw_draw_button(reason)
+                    if btn_rect.collidepoint(x, y):
+                        screen.fill(black)
+                        draw_board(matrix)
+                        pygame.display.update()
+                        acao_fim = show_end_popup(0)
+                        running  = False
+                        break
 
-            if jogada_feita:
-                state_history[board_to_tuple(matrix)] = state_history.get(board_to_tuple(matrix), 0) + 1
+                if y < top_area:
+                    if not col_isFull(matrix, col):
+                        drop(matrix, current_player, col)
+                        jogada_feita = True
+                elif y > height - bottom_area:
+                    if check_pop(matrix, current_player, col):
+                        pop(matrix, current_player, col)
+                        jogada_feita = True
 
-                mov_tuple = ("drop", col) if y < top_area else ("pop", col)
+                if jogada_feita:
+                    state_history[board_to_tuple(matrix)] = state_history.get(board_to_tuple(matrix), 0) + 1
+                    mov_tuple = ("drop", col) if y < top_area else ("pop", col)
 
-                # Atualizar root do MCTS (só se for modo MCTS)
-                if ai_human and ai_human != "dt":
-                    novo_root = get_mcts(ai_human).atualizar_root(mcts_root, mov_tuple)
-                    mcts_root = novo_root if novo_root else None
+                    if ai_human and ai_human != "dt":
+                        novo_root = get_mcts(ai_human).atualizar_root(mcts_root, mov_tuple)
+                        mcts_root = novo_root if novo_root else None
 
-                screen.fill(black)
-                draw_board(matrix)
-                pygame.display.update()
+                    screen.fill(black)
+                    draw_board(matrix)
+                    pygame.display.update()
 
-                venceu_atual    = check_victory(matrix, current_player)
-                venceu_oponente = check_victory(matrix, 3 - current_player)
+                    venceu_atual    = check_victory(matrix, current_player)
+                    venceu_oponente = check_victory(matrix, 3 - current_player)
 
-                if venceu_atual or venceu_oponente:
-                    show_end_popup(current_player if venceu_atual else 3 - current_player)
-                    running = False
-                else:
-                    current_player = 3 - current_player
+                    if venceu_atual or venceu_oponente:
+                        acao_fim = show_end_popup(current_player if venceu_atual else 3 - current_player)
+                        running  = False
+                    else:
+                        current_player = 3 - current_player
 
-    # ── AI moves ────────────────────────────────────────────────────────────────
-    if running:
+        if not running:
+            break
 
-        # ── Modo 2: Human vs AI ──
+        # ── Jogadas de IA ────────────────────────────────────────────────────────
+
+        # Modo 2: Human vs AI
         if modo_jogo == 2 and current_player == 2:
 
             if full_board_draw_available or repetition_draw_available:
-                show_end_popup(0)
-                running = False
+                acao_fim = show_end_popup(0)
+                running  = False
             else:
                 movimento, mcts_root = ai_play(ai_human, matrix, current_player, mcts_root, dt_tree)
 
@@ -413,7 +475,6 @@ while running:
 
                 state_history[board_to_tuple(matrix)] = state_history.get(board_to_tuple(matrix), 0) + 1
 
-                # Atualizar root após jogada da IA
                 if ai_human and ai_human != "dt" and mcts_root is not None:
                     novo_root = get_mcts(ai_human).atualizar_root(mcts_root, movimento)
                     if novo_root:
@@ -430,30 +491,28 @@ while running:
                 venceu_oponente = check_victory(matrix, 3 - current_player)
 
                 if venceu_atual or venceu_oponente:
-                    show_end_popup(current_player if venceu_atual else 3 - current_player)
-                    running = False
+                    acao_fim = show_end_popup(current_player if venceu_atual else 3 - current_player)
+                    running  = False
                 else:
                     current_player = 3 - current_player
 
-        # ── Modo 3: AI vs AI ──
+        # Modo 3: AI vs AI — uma jogada por frame, para o ecrã atualizar e o botão ser responsivo
         elif modo_jogo == 3:
 
             screen.fill(black)
             draw_board(matrix)
             pygame.display.update()
 
-            ai_atual = ai_p1 if current_player == 1 else ai_p2
+            ai_atual   = ai_p1 if current_player == 1 else ai_p2
             root_atual = mcts_root_p1 if current_player == 1 else mcts_root_p2
 
             movimento, novo_root = ai_play(ai_atual, matrix, current_player, root_atual, dt_tree)
 
-            # Guardar root atualizado
             if current_player == 1:
                 mcts_root_p1 = novo_root
             else:
                 mcts_root_p2 = novo_root
 
-            # Informar o root do outro jogador da jogada feita
             if current_player == 1 and mcts_root_p2 is not None and ai_p2 != "dt":
                 mcts_root_p2 = get_mcts(ai_p2).atualizar_root(mcts_root_p2, movimento)
             elif current_player == 2 and mcts_root_p1 is not None and ai_p1 != "dt":
@@ -478,24 +537,16 @@ while running:
             venceu_oponente = check_victory(matrix, 3 - current_player)
 
             if venceu_atual or venceu_oponente:
-                show_end_popup(current_player if venceu_atual else 3 - current_player)
-                matrix, current_player, _ = reset_game()
-                mcts_root_p1 = None
-                mcts_root_p2 = None
-                state_history = {}
-                turn = 0
+                acao_fim = show_end_popup(current_player if venceu_atual else 3 - current_player)
+                running  = False
             else:
                 current_player = 3 - current_player
 
-        if jogos > MAX:
-            running = False
+        # ── Render (modos 1 e 2 no turno do humano) ──────────────────────────────
+        if running and modo_jogo != 3:
+            screen.fill(black)
+            draw_board(matrix)
 
-    # ── Render ──────────────────────────────────────────────────────────────────
-    if running:
-        screen.fill(black)
-        draw_board(matrix)
-
-        if modo_jogo != 3:
             mx, my = pygame.mouse.get_pos()
             col    = mx // cell_size
             hl     = pygame.Surface((cell_size, ROWS * cell_size), pygame.SRCALPHA)
@@ -506,26 +557,44 @@ while running:
                 color = player1 if current_player == 1 else player2
                 pygame.draw.circle(screen, color, (mx, top_area // 2), cell_size // 2 - 10)
 
-            if repetition_draw_available or full_board_draw_available:
-                reason = "R3" if repetition_draw_available else "R2"
-                draw_draw_button(reason)
+            if repetition_draw_available:
+                draw_draw_button("R3")
 
-        pygame.display.update()
+            pygame.display.update()
+
+    print("\n--- STATS ---")
+    print("Reuse OK:", reuse_ok)
+    print("Reuse FAIL:", reuse_fail)
+
+    return acao_fim if acao_fim else "menu"
 
 
-pygame.quit()
+# ── LOOP PRINCIPAL DA APLICAÇÃO ──────────────────────────────────────────────────
+def salvar_dataset():
+    file_exists = os.path.exists("dataset.csv")
+    with open("dataset.csv", "a", newline="") as f:
+        fieldnames = [f"cell_{r}_{c}" for r in range(6) for c in range(7)] + ["label"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        for estado, mov in dataset:
+            row = {f"cell_{r}_{c}": str(estado[r][c]) for r in range(6) for c in range(7)}
+            row["label"] = f"{mov[0]}_{mov[1]}"
+            writer.writerow(row)
 
-print("\n--- STATS ---")
-print("Reuse OK:", reuse_ok)
-print("Reuse FAIL:", reuse_fail)
+try:
+    while True:
+        modo_jogo = show_menu()
+        ai_p1, ai_p2, ai_human, dt_tree = setup_ai(modo_jogo)
 
-file_exists = os.path.exists("dataset.csv")
-with open("dataset.csv", "a", newline="") as f:
-    fieldnames = [f"cell_{r}_{c}" for r in range(6) for c in range(7)] + ["label"]
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
-    if not file_exists:
-        writer.writeheader()
-    for estado, mov in dataset:
-        row = {f"cell_{r}_{c}": str(estado[r][c]) for r in range(6) for c in range(7)}
-        row["label"] = f"{mov[0]}_{mov[1]}"
-        writer.writerow(row)
+        acao = "replay"
+        while acao == "replay":
+            acao = run_game(modo_jogo, ai_p1, ai_p2, ai_human, dt_tree)
+            # "menu"   -> sai do inner loop e volta ao show_menu()
+            # "replay" -> recomeça a partida com as mesmas IAs
+
+except (SystemExit, KeyboardInterrupt):
+    pass
+finally:
+    salvar_dataset()
+    pygame.quit()
