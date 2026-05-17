@@ -192,7 +192,7 @@ def algoritmo_mcts(board, jogador_atual, tempo, root=None):
         node.backpropagate(result)
         iteracoes += 1
 
-    print(f"MCTS_Bitboard Iterações: {iteracoes}")
+    
 
     # Se a heurística tinha uma jogada forçada, devolve-a com o root construído
     if heuristica_move is not None:
