@@ -1,97 +1,74 @@
+# bitboard.py
 ROWS = 6
 COLS = 7
 
-MASK_HORIZONTAL = 0
-for r in range(ROWS):
-    MASK_HORIZONTAL |= 0b0111111 << (r * COLS)
+# Máscaras para evitar que 4 em linha "dobrem" a esquina do tabuleiro
+# Criadas bit a bit para não haver erro de interpretação
+NOT_COL0 = 0
+for r in range(6):
+    for c in range(1, 7): NOT_COL0 |= (1 << (r * 7 + c))
 
+NOT_COL6 = 0
+for r in range(6):
+    for c in range(0, 6): NOT_COL6 |= (1 << (r * 7 + c))
 
 def board_to_bitboard(board):
-    p1 = 0
-    p2 = 0
-    for r in range(ROWS):
-        for c in range(COLS):
-            if board[r][c] == 1:
-                p1 |= 1 << (r * COLS + c)
-            elif board[r][c] == 2:
-                p2 |= 1 << (r * COLS + c)
+    p1, p2 = 0, 0
+    for r in range(6):
+        for c in range(7):
+            if board[r][c] == 1: p1 |= (1 << (r * 7 + c))
+            elif board[r][c] == 2: p2 |= (1 << (r * 7 + c))
     return p1, p2
 
-def bitboard_to_board(p1, p2):
-    board = [[0] * COLS for _ in range(ROWS)]
-    for r in range(ROWS):
-        for c in range(COLS):
-            if p1 & (1 << (r * COLS + c)):
-                board[r][c] = 1
-            elif p2 & (1 << (r * COLS + c)):
-                board[r][c] = 2
-    return board
+def col_is_full(p1, p2, col):
+    return ((p1 | p2) & (1 << col)) != 0
 
-def col_is_full (p1, p2, col):
-    return (p1 & (1 << col)) != 0 or (p2 & (1 << col)) != 0
-
-def check_pop (p, jogador, col):
+def check_pop(p, jogador, col):
+    # Fundo é a linha 5 (bits 35 a 41)
     return (p & (1 << (35 + col))) != 0
 
-def drop (p1, p2, jogador, col):
-    for r in range(ROWS - 1, -1, -1):
-        if (p1 & (1 << (r * COLS + col))) == 0 and (p2 & (1 << (r * COLS + col))) == 0:
-            if jogador == 1:
-                p1 |= 1 << (r * COLS + col)
-            else:
-                p2 |= 1 << (r * COLS + col)
+def drop(p1, p2, jogador, col):
+    # Procura da linha 5 para a 0
+    for r in range(5, -1, -1):
+        idx = r * 7 + col
+        if not ((p1 | p2) & (1 << idx)):
+            if jogador == 1: p1 |= (1 << idx)
+            else: p2 |= (1 << idx)
             break
     return p1, p2
 
 def pop(p1, p2, col):
-    for r in range(ROWS-1, 0, -1):
-        idx_atual = r * COLS + col
-        idx_acima = (r-1) * COLS + col
-        
-        if (p1 & (1 << idx_acima)):
-            p1 |= 1 << idx_atual
-        else:            
-            p1 &= ~(1 << idx_atual)
-
-        if (p2 & (1 << idx_acima)):
-            p2 |= 1 << idx_atual
-
-        else:
-            p2 &= ~(1 << idx_atual)
-    
-    # apagar o topo (linha 0) em ambos
+    # Peças de cima caem
+    for r in range(5, 0, -1):
+        idx_atual, idx_acima = r * 7 + col, (r - 1) * 7 + col
+        if p1 & (1 << idx_acima): p1 |= (1 << idx_atual)
+        else: p1 &= ~(1 << idx_atual)
+        if p2 & (1 << idx_acima): p2 |= (1 << idx_atual)
+        else: p2 &= ~(1 << idx_atual)
+    # Topo fica vazio
     p1 &= ~(1 << col)
     p2 &= ~(1 << col)
-    
     return p1, p2
 
 def check_victory(p):
-    # horizontal
-    m = (p & MASK_HORIZONTAL) & ((p & MASK_HORIZONTAL) >> 1)
-    if m & (m >> 2): return True
-    
-    # vertical
-    m = p & (p >> 7)
-    if m & (m >> 14): return True
-    
-    # diagonal ↘
-    m = p & (p >> 8)
-    if m & (m >> 16): return True
-    
-    # diagonal ↗
-    m = p & (p >> 6)
-    if m & (m >> 12): return True
-    
+    # Vertical (shift 7)
+    v = p & (p >> 7)
+    if v & (v >> 14): return True
+    # Horizontal (shift 1 + máscara)
+    h = p & (p >> 1) & NOT_COL0
+    if h & (h >> 2) & (NOT_COL0 >> 2): return True
+    # Diagonal \ (shift 8 + máscara)
+    d1 = p & (p >> 8) & NOT_COL0
+    if d1 & (d1 >> 16) & (NOT_COL0 >> 16): return True
+    # Diagonal / (shift 6 + máscara)
+    d2 = p & (p >> 6) & NOT_COL6
+    if d2 & (d2 >> 12) & (NOT_COL6 >> 12): return True
     return False
 
 def get_legal_moves(p1, p2, jogador):
-    p = p1 if jogador == 1 else p2
+    p_jogador = p1 if jogador == 1 else p2
     moves = []
-    for col in range(COLS):
-        if not col_is_full(p1, p2, col):
-            moves.append(col)
-        if check_pop(p, jogador, col):
-            moves.append(- (col + 1))
+    for c in range(7):
+        if not col_is_full(p1, p2, c): moves.append(c) # Drop
+        if check_pop(p_jogador, jogador, c): moves.append(-(c + 1)) # Pop
     return moves
-
-

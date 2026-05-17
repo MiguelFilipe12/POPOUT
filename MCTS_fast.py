@@ -167,8 +167,13 @@ def algoritmo_mcts(board, jogador_atual, tempo, root=None):
 
 def atualizar_root(root, move):
     if root is None: return None
+    # converter tuplo para inteiro
+    if isinstance(move, tuple):
+        move_int = move[1] if move[0] == "drop" else -(move[1] + 1)
+    else:
+        move_int = move
     for child in root.children:
-        if child.move == move:
+        if child.move == move_int:
             child.parent = None
             return child
     return None

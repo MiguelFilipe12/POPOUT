@@ -3,6 +3,15 @@ import math
 import bitboard as bl
 from numba import njit
 
+# Máscaras para o check_victory inline no simulate (mesmo esquema do bitboard.py)
+NOT_COL0 = 0
+for _r in range(6):
+    for _c in range(1, 7): NOT_COL0 |= (1 << (_r * 7 + _c))
+
+NOT_COL6 = 0
+for _r in range(6):
+    for _c in range(0, 6): NOT_COL6 |= (1 << (_r * 7 + _c))
+
 class Node:
 
     
@@ -18,20 +27,14 @@ class Node:
         self.children = []
         self.visits = 0
         self.wins = 0
-        # Movimentos possíveis a partir DESTE estado
         self.untried_moves = bl.get_legal_moves(self.p1, self.p2, jogador_atual)
 
     def expand(self):
-
-
         move = self.untried_moves.pop()
-        
-        
         if move >= 0:
             novo_p1, novo_p2 = bl.drop(self.p1, self.p2, self.jogador_atual, move)
         else:
             novo_p1, novo_p2 = bl.pop(self.p1, self.p2, - (move + 1))
-            
         child = Node(novo_p1, novo_p2, 3 - self.jogador_atual, move, self)
         self.children.append(child)
         return child
@@ -46,6 +49,7 @@ class Node:
                 best_score = score
                 best = c
         return best
+
     def is_terminal(self):
         if bl.check_victory(self.p1) or bl.check_victory(self.p2):
             return True
@@ -55,16 +59,16 @@ class Node:
         node = self
         while node is not None:
             node.visits += 1
-            # O resultado é o vencedor (1 ou 2). Se o vencedor for quem jogou para chegar a este nó, conta vitória.
             if result == 3 - node.jogador_atual: 
                 node.wins += 1
             elif result == 0:
                 node.wins += 0.5
             node = node.parent
+
 @njit
-def simulate(p1, p2, jogador_atual):
+def simulate(p1, p2, jogador_atual, not_col0, not_col6):
     curr = jogador_atual
-    for _ in range(42):
+    for _ in range(200):
         p = p1 if curr == 1 else p2
         moves = [0] * 14
         nm = 0
@@ -98,27 +102,27 @@ def simulate(p1, p2, jogador_atual):
             p1 &= ~(1 << col)
             p2 &= ~(1 << col)
         
-        # check_victory inline
-        # horizontal
-        m = p1 & (p1 >> 1); 
-        if m & (m >> 2): return 1
-        m = p2 & (p2 >> 1)
-        if m & (m >> 2): return 2
+        # check_victory inline com máscaras
         # vertical
         m = p1 & (p1 >> 7)
         if m & (m >> 14): return 1
         m = p2 & (p2 >> 7)
         if m & (m >> 14): return 2
+        # horizontal
+        m = p1 & (p1 >> 1) & not_col0
+        if m & (m >> 2) & (not_col0 >> 2): return 1
+        m = p2 & (p2 >> 1) & not_col0
+        if m & (m >> 2) & (not_col0 >> 2): return 2
         # diagonal ↘
-        m = p1 & (p1 >> 8)
-        if m & (m >> 16): return 1
-        m = p2 & (p2 >> 8)
-        if m & (m >> 16): return 2
+        m = p1 & (p1 >> 8) & not_col0
+        if m & (m >> 16) & (not_col0 >> 16): return 1
+        m = p2 & (p2 >> 8) & not_col0
+        if m & (m >> 16) & (not_col0 >> 16): return 2
         # diagonal ↗
-        m = p1 & (p1 >> 6)
-        if m & (m >> 12): return 1
-        m = p2 & (p2 >> 6)
-        if m & (m >> 12): return 2
+        m = p1 & (p1 >> 6) & not_col6
+        if m & (m >> 12) & (not_col6 >> 12): return 1
+        m = p2 & (p2 >> 6) & not_col6
+        if m & (m >> 12) & (not_col6 >> 12): return 2
 
         curr = 3 - curr
     return 0
@@ -127,8 +131,42 @@ def algoritmo_mcts(board, jogador_atual, tempo, root=None):
 
     import time
     p1, p2 = bl.board_to_bitboard(board)
-
     legal = bl.get_legal_moves(p1, p2, jogador_atual)
+    oponente = 3 - jogador_atual
+
+    # Jogada forçada pela heurística (se existir)
+    heuristica_move = None
+
+    # 1. Ganhar imediatamente se possível (drop ou pop)
+    for move in legal:
+        if move >= 0: np1, np2 = bl.drop(p1, p2, jogador_atual, move)
+        else: np1, np2 = bl.pop(p1, p2, -(move + 1))
+        if bl.check_victory(np1 if jogador_atual == 1 else np2):
+            heuristica_move = ("drop" if move >= 0 else "pop"), (move if move >= 0 else -(move + 1))
+            break
+
+    # 2. Bloquear vitória imediata do oponente (drop ou pop)
+    if heuristica_move is None:
+        for move in bl.get_legal_moves(p1, p2, oponente):
+            if move >= 0: np1, np2 = bl.drop(p1, p2, oponente, move)
+            else: np1, np2 = bl.pop(p1, p2, -(move + 1))
+            if bl.check_victory(np1 if oponente == 1 else np2):
+                col = move if move >= 0 else -(move + 1)
+                if col in legal:
+                    heuristica_move = ("drop", col)
+                    break
+                if move in legal:
+                    heuristica_move = ("drop" if move >= 0 else "pop"), (move if move >= 0 else -(move + 1))
+                    break
+                for m in legal:
+                    if m < 0:
+                        mp1, mp2 = bl.pop(p1, p2, -(m + 1))
+                        if not bl.check_victory(mp1 if oponente == 1 else mp2):
+                            heuristica_move = ("pop", -(m + 1))
+                            break
+                if heuristica_move:
+                    break
+
     if root is None or root.p1 != p1 or root.p2 != p2:
         root = Node(p1, p2, jogador_atual)
 
@@ -143,18 +181,28 @@ def algoritmo_mcts(board, jogador_atual, tempo, root=None):
             node = node.select_child()
             terminal = node.is_terminal()
 
-        # Expansão — reutiliza o terminal já calculado
+        # Expansão
         if node.untried_moves and not terminal:
             node = node.expand()
 
         # Simulação
-        result = simulate(node.p1, node.p2, node.jogador_atual)
+        result = simulate(node.p1, node.p2, node.jogador_atual, NOT_COL0, NOT_COL6)
 
         # Backpropagation
         node.backpropagate(result)
         iteracoes += 1
 
     print(f"MCTS_Bitboard Iterações: {iteracoes}")
+
+    # Se a heurística tinha uma jogada forçada, devolve-a com o root construído
+    if heuristica_move is not None:
+        move_int = heuristica_move[1] if heuristica_move[0] == "drop" else -(heuristica_move[1] + 1)
+        for child in root.children:
+            if child.move == move_int:
+                child.parent = None
+                return heuristica_move, child
+        return heuristica_move, None
+
     if not root.children:
         move = random.choice(legal)
         if move >= 0:
@@ -172,12 +220,10 @@ def algoritmo_mcts(board, jogador_atual, tempo, root=None):
 
 def atualizar_root(root, move):
     if root is None: return None
-    # converter tuplo para inteiro
     if move[0] == "drop":
         move_int = move[1]
     else:
         move_int = -(move[1] + 1)
-    
     for child in root.children:
         if child.move == move_int:
             child.parent = None

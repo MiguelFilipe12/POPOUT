@@ -120,27 +120,36 @@ def draw_draw_button(reason=""):
 
 
 # ── Executar jogada de IA ───────────────────────────────────────────────────────
+TEMPO_MINIMO_IA = 1.0  # segundos mínimos de pausa visível para o jogador
+
 def ai_play(modo, board, jogador, root, dt_tree):
     """
     Executa a jogada da IA conforme o modo escolhido.
     Devolve (movimento, novo_root).
     """
+    inicio = time.time()
+
     if modo == "dt":
         movimento = dt_play(board, dt_tree, jogador)
         legal = mcts_easy.get_legal_moves(board, jogador)
         if movimento not in legal:
             import random
             movimento = random.choice(legal) if legal else ("drop", 3)
-        return movimento, None
-
-    mcts = get_mcts(modo)
-
-    if modo == "easy":
-        movimento, novo_root = mcts.algoritmo_mcts(board, jogador, ITERACOES_EASY, root)
+        resultado = movimento, None
     else:
-        movimento, novo_root = mcts.algoritmo_mcts(board, jogador, TEMPO[modo], root)
+        mcts = get_mcts(modo)
+        if modo == "easy":
+            movimento, novo_root = mcts.algoritmo_mcts(board, jogador, ITERACOES_EASY, root)
+        else:
+            movimento, novo_root = mcts.algoritmo_mcts(board, jogador, TEMPO[modo], root)
+        resultado = movimento, novo_root
 
-    return movimento, novo_root
+    # Garantir pausa mínima para que a jogada seja visível
+    decorrido = time.time() - inicio
+    if decorrido < TEMPO_MINIMO_IA:
+        time.sleep(TEMPO_MINIMO_IA - decorrido)
+
+    return resultado
 
 
 # ── Menus ───────────────────────────────────────────────────────────────────────
