@@ -121,17 +121,11 @@ dt_tree = load_dt()
 
 pares = [
     ("easy",   "medium", "Facil", "Médio"),
-    ("medium",   "easy", "Médio", "Fácil"),
     ("easy",   "hard", "Fácil", "Difícil"),
-    ("hard", "easy", "Difícil", "Fácil"),
     ("easy", "dt", "Fácil", "Árvore"),
-    ("dt", "easy", "Árvore", "Fácil"),
     ("medium", "hard", "Médio", "Difícil"),
-    ("hard", "medium", "Difícil", "Médio"),
     ("medium", "dt", "Médio", "Árvore"),
-    ("dt", "medium", "Árvore," "Médio"),
     ("hard", "dt", "Difícil", "Árvore"),
-    ("dt", "hard", "Árvore", "Difícil")
 ]
 
 resultados = []
