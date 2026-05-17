@@ -571,9 +571,7 @@ def run_game(modo_jogo, ai_p1, ai_p2, ai_human, dt_tree):
 
             pygame.display.update()
 
-    print("\n--- STATS ---")
-    print("Reuse OK:", reuse_ok)
-    print("Reuse FAIL:", reuse_fail)
+
 
     return acao_fim if acao_fim else "menu"
 
