@@ -149,7 +149,7 @@ def algoritmo_mcts(board, jogador_atual, tempo, root=None):
         node.backpropagate(result)
         iteracoes += 1
     
-    print(f"Iterações: {iteracoes}")
+    
     if not root.children:
         move = random.choice(legal)
         if move >= 0:
